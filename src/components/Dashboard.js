@@ -1,47 +1,94 @@
 import './TaskManager.css';
 import {useState,useEffect} from "react";
-import { data } from 'react-router-dom';
 import {useNavigate} from 'react-router-dom';
 
 const Dashboard = () => { 
     const [tasks,setTasks]=useState([]);
-    const userId = localStorage.getItem('userId');
+    const [error, setError] = useState(""); 
+    const [loading, setLoading] = useState(false);
+
+    const token = localStorage.getItem("token");
     const navigate = useNavigate();
+    console.log("TOKEN IN DASHBOARD:", token);
 
     useEffect(()=>{
-        fetch(`http://localhost:5000/tasks?userId=${userId}`)
-        .then(res=>res.json()).then(data=>setTasks(data))
-        .catch(err=>console.log(err));
+        if(!token){
+            navigate('/');
+        }
     },[]);
-
+    useEffect(()=>{
+        const fetchTasks = async()=>{
+            try{
+                setError("");
+                setLoading(true);
+                const res = await fetch(`http://localhost:5000/api/tasks`,{
+                    headers: {"Authorization": `Bearer ${token}`}
+                });
+                const data = await res.json();
+                if(!res.ok){
+                    setError(data.message);
+                    return;
+                }
+                setTasks(data.data);
+            }catch(err){
+                setError("Failed to fetch Tasks");
+            }finally{
+                setLoading(false);
+            }
+        };
+        fetchTasks();
+    },[]);
     const deleteTask =async (id)=>{
-        await fetch(`http://localhost:5000/tasks/${id}`,{
-            method: "DELETE",
-            headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({userId})
-        });
-        setTasks(tasks.filter(task=>task._id!==id)); 
+        try{
+            const res = await fetch(`http://localhost:5000/api/tasks/${id}`,{
+                method: "DELETE",
+                headers: {'Content-Type':'application/json',
+                            "Authorization": `Bearer ${token}`},
+            });
+            const data = await res.json();
+            if(!res.ok){
+                setError(data.message);
+                return;
+            }
+
+            setTasks(tasks.filter(task=>task._id!==id)); 
+        }catch(err){
+            setError("Failed to delete Task");
+        }
     }
 
     const completedTask = async(id)=>{
-        await fetch(`http://localhost:5000/tasks/${id}`,{
-            method: "PUT",
-            headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({userId,status:"completed"})
-        });
-        setTasks(tasks.map(task=>task._id===id?{...task,status:"completed"}:task));
+        try{
+            const res = await fetch(`http://localhost:5000/api/tasks/${id}`,{
+                method: "PUT",
+                headers: {'Content-Type':'application/json',
+                            "Authorization": `Bearer ${token}`},
+                body: JSON.stringify({status:"completed"})
+            });
+            const data = await res.json();
+            if(!res.ok){
+                setError(data.message);
+                return;
+            }
+            setTasks(tasks.map(task=>task._id===id?{...task,status:"completed"}:task));
+        }catch(err){
+            setError("Failed to update Task");
+        }
     };
 
     const logout = () =>{
-        localStorage.removeItem('userId');
+        localStorage.removeItem('token');
         navigate('/');
     };
 
     return (
         <div className="dashboard">
             <h2>Dashboard</h2>
-            {tasks.length===0? 
-            <p>No Tasks Available</p> : 
+            {error && <p style={{ color: "red" }}>{error}</p>}
+            {loading ?(
+                 <p>Loading Tasks...</p> ):
+            tasks.length===0? 
+            <p>No Tasks Available.Add your Tasks</p> : 
             tasks.map(task=>(
                 <div key ={task._id}>
                     <h3>{task.title}</h3>
@@ -52,7 +99,7 @@ const Dashboard = () => {
                 </div>
             ))
             }
-            <button onClick={()=>navigate('/addTask')}>Add Task</button>
+            <button onClick={()=>navigate('/add_task')}>Add Task</button>
             <button onClick={logout}>Logout</button>
         </div>
     );
